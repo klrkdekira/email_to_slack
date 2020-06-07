@@ -90,11 +90,11 @@ def main():
     db = sqlite3.connect("history.db")
     migrate(db)
 
-    mailer = poplib.POP3_SSL(config.pop3_server, config.pop3_port)
-    mailer.user(config.pop3_account)
-    mailer.pass_(config.pop3_password)
-
     while True:
+        mailer = poplib.POP3_SSL(config.pop3_server, config.pop3_port)
+        mailer.user(config.pop3_account)
+        mailer.pass_(config.pop3_password)
+
         print("fetching new emails")
         mails = mailer.list()
         if len(mails) > 1:

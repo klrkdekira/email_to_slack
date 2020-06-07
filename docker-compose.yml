@@ -1,6 +1,6 @@
 job:
     image: klrkdekira/email_to_slack:latest
-    volume:
+    volumes:
         - ./data:/data
     environment:
         POP3_SERVER: ""
