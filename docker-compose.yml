@@ -1,0 +1,11 @@
+job:
+    image: klrkdekira/email_to_slack:latest
+    volume:
+        - ./data:/data
+    environment:
+        POP3_SERVER: ""
+        POP3_PORT: ""
+        POP3_ACCOUNT: ""
+        POP3_PASSWORD: ""
+        SLACK_WEBHOOK: ""
+    restart: always

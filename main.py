@@ -6,7 +6,6 @@ import json
 import poplib
 import time
 import sqlite3
-import urllib.parse
 import urllib.request
 
 
@@ -139,7 +138,7 @@ def main():
                                         config.slack_webhook, code.decode("utf-8")
                                     )
                                     update_db(db, mail_id)
-                                    break
+                                break
         print("back to sleep")
         time.sleep(60)
     db.close()
