@@ -18,4 +18,4 @@ ENV POP3_ACCOUNT ""
 ENV POP3_PASSWORD ""
 ENV SLACK_WEBHOOK ""
 
-CMD [ "main.py" ]
+CMD [ "python", "-u", "/usr/local/bin/main.py" ]

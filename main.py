@@ -49,7 +49,7 @@ def migrate(db):
     c.execute(
         """
 CREATE TABLE IF NOT EXISTS history (
-    id INT PRIMARY KEY,
+    id INTEGER PRIMARY KEY,
     mail_id TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(mail_id)
