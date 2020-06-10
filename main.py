@@ -3,10 +3,21 @@
 import os
 from dataclasses import dataclass
 import json
+import logging
 import poplib
 import time
 import sqlite3
 import urllib.request
+
+formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+
+handler = logging.StreamHandler()
+handler.setLevel(logging.DEBUG)
+handler.setFormatter(formatter)
+
+log = logging.getLogger(__name__)
+log.setLevel(logging.DEBUG)
+log.addHandler(handler)
 
 
 @dataclass
@@ -44,33 +55,41 @@ def get_config():
     )
 
 
-def migrate(db):
-    c = db.cursor()
-    c.execute(
-        """
-CREATE TABLE IF NOT EXISTS history (
-    id INTEGER PRIMARY KEY,
-    mail_id TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(mail_id)
-);
-"""
-    )
-    db.commit()
+class Database:
+    def __init__(self, path):
+        self.db = sqlite3.connect("history.db")
 
+    def __enter__(self):
+        return self
 
-def lookup(db, mail_id):
-    c = db.cursor()
-    c.execute("SELECT 1 FROM history WHERE mail_id=? LIMIT 1", (mail_id,))
-    if c.fetchone():
-        return True
-    return False
+    def __exit__(self, *args):
+        self.db.close()
 
+    def migrate(self):
+        c = self.db.cursor()
+        c.execute(
+            """
+    CREATE TABLE IF NOT EXISTS history (
+        id INTEGER PRIMARY KEY,
+        mail_id TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(mail_id)
+    );
+    """
+        )
+        self.db.commit()
 
-def update_db(db, mail_id):
-    c = db.cursor()
-    c.execute("INSERT INTO history (mail_id) VALUES (?)", (mail_id,))
-    db.commit()
+    def check(self, mail_id):
+        c = self.db.cursor()
+        c.execute("SELECT 1 FROM history WHERE mail_id=? LIMIT 1", (mail_id,))
+        if c.fetchone():
+            return True
+        return False
+
+    def insert(self, mail_id):
+        c = self.db.cursor()
+        c.execute("INSERT INTO history (mail_id) VALUES (?)", (mail_id,))
+        self.db.commit()
 
 
 def send_code(webhook, code):
@@ -84,64 +103,82 @@ def send_code(webhook, code):
     urllib.request.urlopen(req)
 
 
-def main():
-    config = get_config()
-
-    db = sqlite3.connect("history.db")
-    migrate(db)
-
-    while True:
+class Mailer:
+    def __init__(self, db, config):
         mailer = poplib.POP3_SSL(config.pop3_server, config.pop3_port)
         mailer.user(config.pop3_account)
         mailer.pass_(config.pop3_password)
+        self.mailer = mailer
+        self.db = db
 
-        print("fetching new emails")
-        mails = mailer.list()
-        if len(mails) > 1:
-            for i, mail_id in map(lambda m: m.split(), mails[1]):
-                if not lookup(db, mail_id):
-                    print("found new email")
-                    status, content, _ = mailer.retr(int(i))
+    def __enter__(self):
+        mails = self.mailer.list()
+        if len(mails) != 3:
+            return []
 
-                    if status == b"+OK":
-                        print("status passed")
-                        confirmed = 0
-                        cursor = 0
-                        count = len(content)
+        for i, mail_id in map(lambda m: m.split(), mails[1]):
+            if self.db.check(mail_id):
+                continue
 
-                        for row_id in range(count):
-                            row = content[row_id]
-                            if row == b"From: yourfriends@streamyard.com":
-                                confirmed += 1
-                                continue
+            status, content, _ = self.mailer.retr(int(i))
+            if status != b"+OK":
+                continue
 
-                            if row == b"Subject: StreamYard Login Code":
-                                confirmed += 1
-                                continue
+            cursor = 0
+            confirmed = 0
+            count = len(content)
 
-                            if confirmed == 2:
-                                cursor = row_id
-                                break
+            for row_id in range(count):
+                row = content[row_id]
 
-                        if confirmed != 2:
-                            print("not from streamyard")
-                            continue
+                if row == b"From: yourfriends@streamyard.com":
+                    confirmed += 1
+                    continue
 
-                        for row_id in range(cursor, count):
-                            row = content[row_id]
-                            if row == b"Here is your login code for StreamYard:":
-                                print("found a new code")
-                                target = row_id + 2
-                                if target < count:
-                                    code = content[target]
-                                    send_code(
-                                        config.slack_webhook, code.decode("utf-8")
-                                    )
-                                    update_db(db, mail_id)
-                                break
-        print("back to sleep")
-        time.sleep(60)
-    db.close()
+                if row == b"Subject: StreamYard Login Code":
+                    confirmed += 1
+                    continue
+
+                if confirmed == 2:
+                    cursor = row_id
+                    break
+
+            if confirmed != 2:
+                self.db.insert(mail_id)
+                continue
+
+            for row_id in range(cursor, count):
+                row = content[row_id]
+                if row == b"Here is your login code for StreamYard:":
+                    target = row_id + 2
+                    if target < count:
+                        code = content[target]
+                        yield code
+                        self.db.insert(mail_id)
+                    break
+
+    def __exit__(self, *args):
+        self.mailer.close()
+
+
+def main():
+    log.info("program started")
+
+    config = get_config()
+
+    with Database("history.db") as db:
+        log.info("connected to db")
+        db.migrate()
+
+        while True:
+            log.debug("fetching email")
+            with Mailer(db, config) as mails:
+                for code in mails:
+                    c = code.decode("utf-8")
+                    log.debug(f"found a new code {c}")
+                    send_code(config.slack_webhook, c)
+            log.debug("back to sleep")
+            time.sleep(60)
 
 
 if __name__ == "__main__":
