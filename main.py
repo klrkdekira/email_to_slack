@@ -154,13 +154,12 @@ class Mailer:
                     if target < count:
                         code = content[target]
                         yield code
-                        self.mailer.dele(mail_id)
+                        self.mailer.dele(int(i))
                         self.db.insert(mail_id)
                     break
 
     def __exit__(self, *args):
-        self.mailer.close()
-
+        self.mailer.quit()
 
 def main():
     log.info("program started")
@@ -179,7 +178,7 @@ def main():
                     log.debug(f"found a new code {c}")
                     send_code(config.slack_webhook, c)
             # log.debug("back to sleep")
-            time.sleep(60)
+            time.sleep(30)
 
 
 if __name__ == "__main__":
