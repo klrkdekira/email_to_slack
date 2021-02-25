@@ -154,6 +154,7 @@ class Mailer:
                     if target < count:
                         code = content[target]
                         yield code
+                        self.mailer.dele(mail_id)
                         self.db.insert(mail_id)
                     break
 
@@ -171,13 +172,13 @@ def main():
         db.migrate()
 
         while True:
-            log.debug("fetching email")
+            # log.debug("fetching email")
             with Mailer(db, config) as mails:
                 for code in mails:
                     c = code.decode("utf-8")
                     log.debug(f"found a new code {c}")
                     send_code(config.slack_webhook, c)
-            log.debug("back to sleep")
+            # log.debug("back to sleep")
             time.sleep(60)
 
 
