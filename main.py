@@ -130,8 +130,7 @@ class Mailer:
 
             for row_id in range(count):
                 row = content[row_id]
-
-                if row == b"From: yourfriends@streamyard.com":
+                if row == b"From: Your Friends <yourfriends@streamyard.com>":
                     confirmed += 1
                     continue
 
@@ -149,7 +148,7 @@ class Mailer:
 
             for row_id in range(cursor, count):
                 row = content[row_id]
-                if row == b"Here is your login code for StreamYard:":
+                if row == b'Your login code is:':
                     target = row_id + 2
                     if target < count:
                         code = content[target]
